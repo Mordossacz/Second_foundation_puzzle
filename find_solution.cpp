@@ -52,16 +52,16 @@ struct Point {
         return lp;
     }
 
-    Point rotate_60_ccw() {
+    Point rotate_60_ccw() const {
         return {y * -1, x + y};
     }
 
-    Point rotate_60() {
+    Point rotate_60() const {
         return {x + y, -1 * x};
     }
 
     // degrees = k*60
-    Point rotate(int k) {
+    Point rotate(int k) const {
         Point p = {x, y};
 
         k = (k % 6);
@@ -76,7 +76,7 @@ struct Point {
         return p;
     }
 
-    Point symmetry_oy() {
+    Point symmetry_oy() const {
         return {-1 * x, y};
     }
 };
@@ -132,7 +132,7 @@ struct Triangle {
     }
 
     // degrees = k*60
-    Triangle rotate(int k) {
+    Triangle rotate(int k) const {
         vector<Point> r_points;
 
         for (auto& p : points) {
@@ -142,8 +142,12 @@ struct Triangle {
         return Triangle(std::move(r_points));
     }
 
-    Triangle symmetry_oy() {
+    Triangle symmetry_oy() const {
         return Triangle(points.at(0), points.at(1), points.at(2));
+    }
+
+    Triangle move(const Point& p) const {
+        return Triangle(points.at(0) + p, points.at(1) + p, points.at(2) + p);
     }
 };
 
@@ -161,7 +165,6 @@ class Block {
     inline static int block_counter = 0;
 
     int id;
-    std::string name;
     vector<Triangle> shape;
 
     int get_new_id() {
@@ -169,33 +172,127 @@ class Block {
     }
 
 public:
-    Block(const std::string& name, vector<Triangle>&& shape)
-        : id(get_new_id()), name(name), shape(std::move(shape)) {}
+    Block() {}
+    Block(vector<Triangle>&& shape)
+        : id(get_new_id()), shape(std::move(shape)) {}
 
-    Block(const std::string& name, const vector<Triangle>& shape)
-        : id(get_new_id()), name(name), shape(shape) {}
+    Block(const vector<Triangle>& shape)
+        : id(get_new_id()), shape(shape) {}
     
     const vector<Triangle>& get_shape() const {
         return shape;
     }
 
+    int get_id() const {
+        return id;
+    }
+
     Block flip_block() {
         vector<Triangle> f_shape;
 
-        return Block(name + "'", std::move(f_shape));
+        for (auto& t : shape) {
+            f_shape.push_back(t.symmetry_oy());
+        }
+
+        return Block(std::move(f_shape));
     }
 
-    Block rotate_block(int angle) {
+    Block rotate_block(int k) {
         vector<Triangle> r_shape;
 
-        return Block(name + std::to_string(angle), std::move(r_shape));
+        for (auto& t : shape) {
+            r_shape.push_back(t.rotate(k));
+        }
+
+        return Block(std::move(r_shape));
+    }
+
+    bool try_to_fit_any_combination(const Plane& plane, const Point& point, Block* result) {
+        Block candidate = *this;
+
+        for (int j = 0; j < 1; ++j) {
+            for (int i = 0; i < 6; ++i) {
+                if (plane.try_to_fit_block(candidate, point)) {
+                    *result = std::move(candidate);
+                    return true;
+                }
+
+                candidate = candidate.rotate_block(1);
+            }
+
+            candidate = candidate.flip_block();
+        }
+
+        return false;
+    }
+
+    vector<Block> generate_every_combination(const Point& point) const {
+        vector<Block> combinations;
+        Block candidate = *this;
+
+        for (int j = 0; j < 1; ++j) {
+            for (int i = 0; i < 6; ++i) {
+                combinations.push_back(candidate);
+
+                candidate = candidate.rotate_block(1);
+            }
+
+            candidate = candidate.flip_block();
+        }
+
+        return combinations;
     }
 };
 
 class Plane {
     std::unordered_map<Triangle, int, TriangleHash> surface;
+
     std::unordered_set<Point, PointHash> starting_points;
     std::unordered_set<Point, PointHash> ending_points;
+    inline static Point next_point_vector = {1, 0};
+
+    inline static int solutions_counter = 0;
+    inline static int solutions_generated = 0;
+
+    bool find_solution_rec(int i, const vector<Block>& blocks) {
+        if (i < 0) return true;
+        Block result;
+
+        for (auto p : starting_points) {
+            p -= next_point_vector;
+            do {
+                p += next_point_vector;
+
+                for (auto& b : blocks.at(i).generate_every_combination(p)) {
+
+                    if (try_to_fit_block(b, p)) {
+                        fit_block(b, p);
+                        // we succeeded at inserting our block
+
+                        if (find_solution_rec(i - 1, blocks)) {
+                            // every smaller block is also inserted
+                            if (blocks.size() == i) {
+                                if (solutions_generated == 0) {
+                                    generate_map_file(
+                                        "solve_for_" + std::to_string(i) +
+                                        "_" + std::to_string(solutions_counter)
+                                    );
+                                    ++solutions_generated;
+                                }
+                                ++solutions_counter;
+                            }
+                            else return true;
+                        }
+
+                        clear(b, p);
+                    }
+                }
+            }
+            while (!ending_points.contains(p));
+        }
+
+        return false;
+    }
 
 public:
     // give points in counter clock wise manner
@@ -220,14 +317,54 @@ public:
             if (base_vector.y < 0) starting_points.emplace(end);
             else if (base_vector.y > 0) ending_points.emplace(end);
         }
-
     }
 
-    // void try_to_fit(Plane& plane) {
+    bool try_to_fit_triangle(const Triangle& t) const {
+        return surface.contains(t);
+    }
 
-    // }
+    bool try_to_fit_block(const Block& b, const Point& p) const {
+        for (auto& t : b.get_shape()) {
+            if (!try_to_fit_triangle(t.move(p))) return false;
+        }
 
-    void generate_map_file(const std::string& filename) {
+        return true;
+    }
+
+    void fit_block(const Block& b, const Point& p) {
+        for (auto& t : b.get_shape()) {
+            surface.emplace(t.move(p), b.get_id());
+        }
+    }
+
+    void clear() {
+        for (auto it = surface.begin(); it != surface.end();) {
+            if (it->second != 0) {
+                it = surface.erase(it);
+            }
+            else ++it;
+        }
+    }
+
+    void clear(int block_id) {
+        for (auto it = surface.begin(); it != surface.end();) {
+            if (it->second == block_id) {
+                it = surface.erase(it);
+            }
+            else ++it;
+        }
+    }
+
+    void clear(const Block& b, const Point& p) {
+        for (auto& t : b.get_shape()) {
+            auto it = surface.find(t);
+            if (it != surface.end() && it->second == b.get_id()) {
+                surface.erase(t);
+            }
+        }
+    }
+
+    void generate_map_file(const std::string& filename) const {
         {
             std::ofstream file(filename);
             if (!file) {
@@ -236,9 +373,15 @@ public:
             }
 
             for (auto& it : surface) {
-                file << it.first << " " << it.second << '\n';
+                file << it.first << ", " << it.second << '\n';
             }
         }
+    }
+
+
+    std::tuple<int, int> find_solution(const vector<Block>& blocks) {
+        find_solution_rec(blocks.size() - 1, blocks);
+        return {solutions_generated, solutions_counter};
     }
 };
 
@@ -265,10 +408,18 @@ void plane_test() {
     cout << "------------------" << '\n';
 }
 
-int main() {
-    plane_test();
+void small_block() {
+    Block A = {{
+        {{1, 0}, {1, 1}, {0, 1}}
+    }};
 
-    triangle_test();
+
+}
+
+int main() {
+    // plane_test();
+
+    // triangle_test();
 
     return 0;
 }
