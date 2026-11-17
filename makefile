@@ -8,4 +8,4 @@ find_solution: find_solution.cpp
 	$(CXX) $(CXXFLAGS) find_solution.cpp -o find_solution
 
 clean:
-	rm -f *.o find_solution
+	rm -f *.o find_solution test solve_*

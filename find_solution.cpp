@@ -1,3 +1,4 @@
+#include <ios>
 #include <vector>
 #include <fstream>
 #include <string>
@@ -89,9 +90,10 @@ struct PointHash {
 
 struct Edge {
     Point a, w;
+    bool strong;
 
-    Edge(Point a, Point b)
-        : a(a), w(b.x - a.x, b.y - a.y)
+    Edge(Point a, Point b, bool strong = true)
+        : a(a), w(b.x - a.x, b.y - a.y), strong(strong)
     {
         if (w.x != 0 && w.y != 0 && abs(w.x) != abs(w.y)) {
             cout << a << " " << b << endl;
@@ -122,6 +124,9 @@ struct Triangle {
     {
         std::sort(this->points.begin(), this->points.end());
     }
+
+    Triangle& operator=(const Triangle& t) = default;
+    Triangle& operator=(Triangle&& t) = default;
 
     Triangle(const Triangle& t) noexcept = default;
     Triangle(Triangle&& t) noexcept = default;
@@ -176,15 +181,28 @@ public:
     Block(vector<Triangle>&& shape)
         : id(get_new_id()), shape(std::move(shape)) {}
 
+    Block(vector<Triangle>&& shape, int id)
+        : id(id), shape(std::move(shape)) {}
+
     Block(const vector<Triangle>& shape)
         : id(get_new_id()), shape(shape) {}
     
+    Block(const Block& b) = default;
+    Block(Block&& b) = default;
+
+    Block& operator=(const Block& b) = default;
+    Block& operator=(Block&& b) = default;
+
     const vector<Triangle>& get_shape() const {
         return shape;
     }
 
     int get_id() const {
         return id;
+    }
+
+    static int get_block_counter() {
+        return block_counter;
     }
 
     Block flip_block() {
@@ -194,7 +212,7 @@ public:
             f_shape.push_back(t.symmetry_oy());
         }
 
-        return Block(std::move(f_shape));
+        return Block(std::move(f_shape), id);
     }
 
     Block rotate_block(int k) {
@@ -204,29 +222,10 @@ public:
             r_shape.push_back(t.rotate(k));
         }
 
-        return Block(std::move(r_shape));
+        return Block(std::move(r_shape), id);
     }
 
-    bool try_to_fit_any_combination(const Plane& plane, const Point& point, Block* result) {
-        Block candidate = *this;
-
-        for (int j = 0; j < 1; ++j) {
-            for (int i = 0; i < 6; ++i) {
-                if (plane.try_to_fit_block(candidate, point)) {
-                    *result = std::move(candidate);
-                    return true;
-                }
-
-                candidate = candidate.rotate_block(1);
-            }
-
-            candidate = candidate.flip_block();
-        }
-
-        return false;
-    }
-
-    vector<Block> generate_every_combination(const Point& point) const {
+    vector<Block> generate_every_combination() const {
         vector<Block> combinations;
         Block candidate = *this;
 
@@ -249,39 +248,43 @@ class Plane {
 
     std::unordered_set<Point, PointHash> starting_points;
     std::unordered_set<Point, PointHash> ending_points;
-    inline static Point next_point_vector = {1, 0};
+    inline static constexpr Point NEXT_POINT = {1, 0};
+    inline static constexpr int BORDER_ID = 0;
+    inline static constexpr int MAX_GENERATE_SOLUTIONS = 10;
 
     inline static int solutions_counter = 0;
-    inline static int solutions_generated = 0;
 
     bool find_solution_rec(int i, const vector<Block>& blocks) {
         if (i < 0) return true;
         Block result;
 
         for (auto p : starting_points) {
-            p -= next_point_vector;
+            p -= NEXT_POINT;
             do {
-                p += next_point_vector;
+                p += NEXT_POINT;
 
-                for (auto& b : blocks.at(i).generate_every_combination(p)) {
+                for (auto& b : blocks.at(i).generate_every_combination()) {
 
                     if (try_to_fit_block(b, p)) {
                         fit_block(b, p);
+
                         // we succeeded at inserting our block
 
                         if (find_solution_rec(i - 1, blocks)) {
+
                             // every smaller block is also inserted
-                            if (blocks.size() == i) {
-                                if (solutions_generated == 0) {
+                            if (static_cast<int>(blocks.size()) == i + 1) {
+                                if (solutions_counter <= MAX_GENERATE_SOLUTIONS) {
                                     generate_map_file(
                                         "solve_for_" + std::to_string(i) +
-                                        "_" + std::to_string(solutions_counter)
+                                        "_" + std::to_string(++solutions_counter)
                                     );
-                                    ++solutions_generated;
                                 }
-                                ++solutions_counter;
                             }
-                            else return true;
+                            else {
+                                clear(b, p);
+                                return true;
+                            }
                         }
 
                         clear(b, p);
@@ -301,18 +304,29 @@ public:
             Point base_vector = e.get_base_vector();
             Point end = e.a + e.w;
 
-            for (Point p = e.a; p != end;) {
+            // for (Point p = e.a; p != end;) {
+            Point p = e.a;
+            Point next_point = p;
+            do {
+                p = next_point;
+                next_point = p + base_vector;
+
                 if (base_vector.y < 0) starting_points.emplace(p);
                 else if (base_vector.y > 0) ending_points.emplace(p);
 
-                Point next_point = p + base_vector;
                 surface.emplace(
                     Triangle(p, next_point, p + base_vector.rotate_60()),
-                    0
+                    BORDER_ID
                 );
 
-                p = next_point;
+                if (e.strong) {
+                    surface.emplace(
+                        Triangle(p, p + base_vector.rotate_60(), p + base_vector.rotate(4)),
+                        BORDER_ID
+                    );
+                }
             }
+            while (p != end);
 
             if (base_vector.y < 0) starting_points.emplace(end);
             else if (base_vector.y > 0) ending_points.emplace(end);
@@ -320,7 +334,7 @@ public:
     }
 
     bool try_to_fit_triangle(const Triangle& t) const {
-        return surface.contains(t);
+        return !surface.contains(t);
     }
 
     bool try_to_fit_block(const Block& b, const Point& p) const {
@@ -356,7 +370,8 @@ public:
     }
 
     void clear(const Block& b, const Point& p) {
-        for (auto& t : b.get_shape()) {
+        for (auto t : b.get_shape()) {
+            t = t.move(p);
             auto it = surface.find(t);
             if (it != surface.end() && it->second == b.get_id()) {
                 surface.erase(t);
@@ -366,7 +381,8 @@ public:
 
     void generate_map_file(const std::string& filename) const {
         {
-            std::ofstream file(filename);
+            std::ofstream file;
+            file.open(filename);
             if (!file) {
                 std::cerr << "Błąd otwarcia pliku" << endl;
                 return;
@@ -375,13 +391,27 @@ public:
             for (auto& it : surface) {
                 file << it.first << ", " << it.second << '\n';
             }
+
+            file << "startings\n";
+            for (auto& it : starting_points) {
+                file << it << ", ";
+            }
+            file << "\nendings\n";
+            for (auto& it : ending_points) {
+                file << it << ", ";
+            }
+            file << '\n';
         }
     }
 
+    void add_border(const Triangle& t) {
+        surface.emplace(t, BORDER_ID);
+    }
 
-    std::tuple<int, int> find_solution(const vector<Block>& blocks) {
+    int find_solution(const vector<Block>& blocks) {
+        solutions_counter = 0;
         find_solution_rec(blocks.size() - 1, blocks);
-        return {solutions_generated, solutions_counter};
+        return solutions_counter;
     }
 };
 
@@ -399,27 +429,110 @@ void triangle_test() {
 void plane_test() {
     cout << "plane_test" << '\n';
     Plane p = {{
-        {{0, 0}, {1, 0}},
-        {{1, 0}, {0, 1}},
-        {{0, 1}, {0, 0}},
+        {{0, 0}, {5, 0}},
+        {{7, 0}, {7, 5}},
     }};
 
     p.generate_map_file("test");
     cout << "------------------" << '\n';
 }
 
-void small_block() {
+void create_and_delete() {
+    cout << "small block" << '\n';
     Block A = {{
-        {{1, 0}, {1, 1}, {0, 1}}
+        {{0, 0}, {0, 1}, {1, 0}},
+        {{0, 1}, {1, 0}, {1, 1}}
+    }};
+    Block B = {{
+        {{0, 0}, {0, 1}, {1, 0}},
+        {{0, 1}, {1, 0}, {1, 1}}
+    }};
+
+    Plane p = {{
+        {{0, 1}, {2, 1}},
+        {{2, 1}, {2, 3}},
+        {{2, 3}, {0, 3}},
+        {{0, 3}, {0, 1}},
     }};
 
 
+    vector<Point> a = {
+        {0, 1},
+        {0, 2},
+        {1, 1},
+        {0, 3},
+        {1, 2},
+        {1, 3}
+    };
+
+    int i = 0;
+
+    for (auto& po : a) {
+
+        if (p.try_to_fit_block(A, po)) {
+            p.fit_block(A, po);
+
+            p.generate_map_file("solve_for_cad_" + std::to_string(i));
+
+            p.clear(A, po);
+
+            p.generate_map_file("solve_for_cad_" + std::to_string(++i));
+        }
+        else {
+            cout << po << " nie da sie" << '\n';
+        }
+        i ++;
+    }
+
+    cout << "------------------" << '\n';
+}
+
+void small_blocks() {
+    cout << "small block" << '\n';
+    Block A = {{
+        {{0, 0}, {0, 1}, {1, 0}},
+        {{0, 1}, {1, 0}, {1, 1}}
+    }};
+    Block B = {{
+        {{0, 0}, {0, 1}, {1, 0}},
+        {{0, 1}, {1, 0}, {1, 1}}
+    }};
+
+    Plane p = {{
+        {{0, 1}, {2, 1}},
+        {{2, 1}, {2, 3}},
+        {{2, 3}, {0, 3}},
+        {{0, 3}, {0, 1}},
+    }};
+
+    //cout << A.get_shape().at(0).move(a) << '\n';
+    //if (p.try_to_fit_triangle(A.get_shape().at(0))) cout << "0 tak\n";
+    //if (p.try_to_fit_triangle(A.get_shape().at(1).move(a))) cout << "1 tak\n";
+
+    //if (p.try_to_fit_block(A, a)) {
+    //    cout << "da sie\n";
+    //    p.fit_block(A, a);
+    //}
+    //else cout << "nie da sie\n";
+    
+    cout << "soulutions found: " << p.find_solution({
+            A,
+            B
+    }) << '\n';
+
+    p.generate_map_file("test");
+
+    cout << "------------------" << '\n';
 }
 
 int main() {
-    // plane_test();
+    //plane_test();
 
     // triangle_test();
+
+    small_blocks();
+
+    // create_and_delete();
 
     return 0;
 }
