@@ -111,7 +111,7 @@ solve_id = input()
 
 tracer(0)
 pu()
-bk(700)
+bk(800)
 lt(90)
 fd(400)
 rt(90)
@@ -148,7 +148,15 @@ for sciezka in sorted(folder.glob("solve_for_" + solve_id + "_*"), key=klucz_nat
                     print(f"start: {p}")
 
                 for p in punkty_stop:
+                    pu()
+                    bk(1)
+                    pd()
+
                     rys_punkt(p, "blue")
+
+                    pu()
+                    fd(1)
+                    pd()
                     print(f"stop: {p}")
 
         update()

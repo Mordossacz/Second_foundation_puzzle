@@ -250,12 +250,11 @@ class Plane {
     std::unordered_set<Point, PointHash> ending_points;
     inline static constexpr Point NEXT_POINT = {1, 0};
     inline static constexpr int BORDER_ID = 0;
-    inline static constexpr int MAX_GENERATE_SOLUTIONS = 10;
+    inline static constexpr int MAX_GENERATE_SOLUTIONS = 30;
 
     inline static int solutions_counter = 0;
 
     bool find_solution_rec(int i, const vector<Block>& blocks) {
-        if (i < 0) return true;
         Block result;
 
         for (auto p : starting_points) {
@@ -267,24 +266,19 @@ class Plane {
 
                     if (try_to_fit_block(b, p)) {
                         fit_block(b, p);
-
                         // we succeeded at inserting our block
 
-                        if (find_solution_rec(i - 1, blocks)) {
-
-                            // every smaller block is also inserted
-                            if (static_cast<int>(blocks.size()) == i + 1) {
-                                if (solutions_counter <= MAX_GENERATE_SOLUTIONS) {
-                                    generate_map_file(
-                                        "solve_for_" + std::to_string(i) +
-                                        "_" + std::to_string(++solutions_counter)
-                                    );
-                                }
+                        if (i == 0) {
+                            // we are last piece, so every bigger block is already inserted
+                            ++solutions_counter;
+                            if (solutions_counter <= MAX_GENERATE_SOLUTIONS) {
+                                generate_map_file(
+                                    "solve_for_a_" + std::to_string(solutions_counter)
+                                );
                             }
-                            else {
-                                clear(b, p);
-                                return true;
-                            }
+                        }
+                        else {
+                            find_solution_rec(i - 1, blocks);
                         }
 
                         clear(b, p);
@@ -310,6 +304,8 @@ public:
             do {
                 p = next_point;
                 next_point = p + base_vector;
+
+                if (!e.strong && p == end) break;
 
                 if (base_vector.y < 0) starting_points.emplace(p);
                 else if (base_vector.y > 0) ending_points.emplace(p);
@@ -377,6 +373,14 @@ public:
                 surface.erase(t);
             }
         }
+    }
+
+    void remove_starting_point(const Point& p) {
+        starting_points.erase(p);
+    }
+
+    void remove_ending_point(const Point& p) {
+        ending_points.erase(p);
     }
 
     void generate_map_file(const std::string& filename) const {
@@ -525,14 +529,245 @@ void small_blocks() {
     cout << "------------------" << '\n';
 }
 
+void first_serious_puzzle() {
+    cout << "first_serious_puzzle" << '\n';
+    Block A = {{
+        {{0, 0}, {0, 1}, {1, 0}},
+        {{0, 1}, {1, 0}, {1, 1}},
+        {{1, 0}, {1, 1}, {2, 0}},
+        {{1, 0}, {2, -1}, {2, 0}}
+    }};
+    Block B = {{
+        {{0, 0}, {1, 0}, {0, 1}},
+        {{0, 1}, {1, 0}, {1, 1}},
+        {{0, 1}, {1, 1}, {0, 2}},
+        {{1, 0}, {2, 0}, {1, 1}},
+        {{0, 2}, {1, 1}, {1, 2}},
+        {{1, 1}, {2, 1}, {1, 2}}
+    }};
+    Block C = {{
+        {{0, 0}, {1, 0}, {1, -1}},
+        {{1, -1}, {2, -1}, {1, 0}},
+        {{1, 0}, {2, -1}, {2, 0}},
+        {{1, 0}, {2, 0}, {1, 1}},
+        {{1, 1}, {2, 0}, {2, 1}},
+        {{1, 1}, {2, 1}, {1, 2}}
+    }};
+
+    Plane p = {{
+        {{1, 1}, {4, 1}},
+        {{4, 1}, {4, 4}},
+        {{4, 4}, {3, 4}},
+        {{3, 4}, {3, 3}, false},
+        {{3, 3}, {2, 4}, false},
+        {{2, 4}, {1, 4}},
+        {{1, 4}, {1, 1}}
+    }};
+
+    p.remove_ending_point({3, 3});
+    p.remove_starting_point({3, 3});
+    // plane created
+
+    cout << "soulutions found: " << p.find_solution({
+            A,
+            B,
+            C
+    }) << '\n';
+
+    cout << "------------\n";
+}
+
+void original_puzzle_hard() {
+    cout << "original_puzzle_hard" << '\n';
+    Block A = {{
+        {{0, 0}, {1, 0}, {0, 1}},
+        {{0, 0}, {0, 1}, {-1, 1}},
+        {{-1, 1}, {0, 1}, {-1, 2}},
+        {{0, 1}, {0, 2}, {-1, 2}},
+        {{-1, 3}, {0, 2}, {-1, 2}},
+        {{-1, 3}, {0, 2}, {0, 3}},
+        {{1, 2}, {0, 2}, {0, 3}},
+        {{1, 2}, {1, 3}, {0, 3}},
+        {{1, 2}, {1, 3}, {2, 2}},
+        {{2, 3}, {1, 3}, {2, 2}},
+        {{2, 3}, {3, 2}, {2, 2}},
+        {{3, 1}, {3, 2}, {2, 2}},
+        {{3, 1}, {3, 2}, {4, 1}},
+    }};
+    Block B = {{
+        {{0, 0}, {1, 0}, {0, 1}},
+        {{1, 1}, {1, 0}, {0, 1}},
+        {{1, 1}, {1, 0}, {2, 0}},
+        {{1, 1}, {2, 1}, {2, 0}},
+        {{3, 0}, {2, 1}, {2, 0}},
+        {{3, 0}, {3, -1}, {2, 0}},
+        {{3, 0}, {3, -1}, {4, -1}},
+        {{3, 0}, {4, 0}, {4, -1}},
+        {{4, -2}, {3, -1}, {4, -1}},
+        {{4, -2}, {5, -2}, {4, -1}},
+        {{4, -2}, {5, -2}, {5, -3}},
+        {{4, -2}, {4, -3}, {5, -3}},
+        {{4, -2}, {4, -3}, {3, -2}}
+    }};
+    Block C = {{
+        {{0, 0}, {0, 1}, {-1, 1}},
+        {{-1, 2}, {0, 1}, {-1, 1}},
+        {{-1, 2}, {0, 1}, {0, 2}},
+        {{1, 1}, {0, 1}, {0, 2}},
+        {{1, 1}, {0, 1}, {1, 0}},
+        {{1, 1}, {1, 2}, {0, 2}},
+        {{1, 1}, {1, 2}, {2, 1}},
+        {{2, 2}, {1, 2}, {2, 1}},
+        {{2, 2}, {1, 2}, {1, 3}},
+        {{2, 2}, {2, 3}, {1, 3}},
+        {{1, 4}, {2, 3}, {1, 3}}
+    }};
+    Block D = {{
+        {{0, 0}, {1, 0}, {1, -1}},
+        {{2, -1}, {1, 0}, {1, -1}},
+        {{2, -1}, {1, 0}, {2, 0}},
+        {{2, -1}, {3, -1}, {2, 0}},
+        {{2, -1}, {3, -1}, {3, -2}},
+        {{4, -2}, {3, -1}, {3, -2}},
+        {{4, -2}, {4, -3}, {3, -2}},
+        {{4, -2}, {4, -3}, {5, -3}},
+        {{4, -2}, {5, -2}, {5, -3}},
+        {{6, -3}, {5, -2}, {5, -3}},
+        {{6, -3}, {5, -2}, {6, -2}},
+        {{5, -1}, {5, -2}, {6, -2}}
+    }};
+
+    Plane p = {{
+        {{0, 0}, {3, 0}},
+        {{3, 0}, {3, 4}},
+        {{3, 4}, {1, 6}},
+        {{1, 6}, {-2, 6}},
+        {{-2, 6}, {-2, 5}, false},
+        {{-2, 5}, {-3, 6}, false},
+        {{-3, 6}, {-4, 6}},
+        {{-4, 6}, {-4, 4}},
+        {{-4, 4}, {0, 0}}
+    }};
+
+    p.remove_ending_point({-2, 5});
+    p.remove_starting_point({-2, 5});
+    // plane created
+
+    cout << "soulutions found: " << p.find_solution({
+            A,
+            B,
+            C,
+            D
+    }) << '\n';
+
+    cout << "------------\n";
+}
+
+void original_puzzle_easy() {
+    cout << "original_puzzle_easy" << '\n';
+    Block A = {{
+        {{0, 0}, {1, 0}, {0, 1}},
+        {{0, 0}, {0, 1}, {-1, 1}},
+        {{-1, 1}, {0, 1}, {-1, 2}},
+        {{0, 1}, {0, 2}, {-1, 2}},
+        {{-1, 3}, {0, 2}, {-1, 2}},
+        {{-1, 3}, {0, 2}, {0, 3}},
+        {{1, 2}, {0, 2}, {0, 3}},
+        {{1, 2}, {1, 3}, {0, 3}},
+        {{1, 2}, {1, 3}, {2, 2}},
+        {{2, 3}, {1, 3}, {2, 2}},
+        {{2, 3}, {3, 2}, {2, 2}},
+        {{3, 1}, {3, 2}, {2, 2}},
+        {{3, 1}, {3, 2}, {4, 1}},
+    }};
+    Block B = {{
+        {{0, 0}, {1, 0}, {0, 1}},
+        {{1, 1}, {1, 0}, {0, 1}},
+        {{1, 1}, {1, 0}, {2, 0}},
+        {{1, 1}, {2, 1}, {2, 0}},
+        {{3, 0}, {2, 1}, {2, 0}},
+        {{3, 0}, {3, -1}, {2, 0}},
+        {{3, 0}, {3, -1}, {4, -1}},
+        {{3, 0}, {4, 0}, {4, -1}},
+        {{4, -2}, {3, -1}, {4, -1}},
+        {{4, -2}, {5, -2}, {4, -1}},
+        {{4, -2}, {5, -2}, {5, -3}},
+        {{4, -2}, {4, -3}, {5, -3}},
+        {{4, -2}, {4, -3}, {3, -2}}
+    }};
+    Block C = {{
+        {{0, 0}, {0, 1}, {-1, 1}},
+        {{-1, 2}, {0, 1}, {-1, 1}},
+        {{-1, 2}, {0, 1}, {0, 2}},
+        {{1, 1}, {0, 1}, {0, 2}},
+        {{1, 1}, {0, 1}, {1, 0}},
+        {{1, 1}, {1, 2}, {0, 2}},
+        {{1, 1}, {1, 2}, {2, 1}},
+        {{2, 2}, {1, 2}, {2, 1}},
+        {{2, 2}, {1, 2}, {1, 3}},
+        {{2, 2}, {2, 3}, {1, 3}},
+        {{1, 4}, {2, 3}, {1, 3}}
+    }};
+    Block D = {{
+        {{0, 0}, {1, 0}, {1, -1}},
+        {{2, -1}, {1, 0}, {1, -1}},
+        {{2, -1}, {1, 0}, {2, 0}},
+        {{2, -1}, {3, -1}, {2, 0}},
+        {{2, -1}, {3, -1}, {3, -2}},
+        {{4, -2}, {3, -1}, {3, -2}},
+        {{4, -2}, {4, -3}, {3, -2}},
+        {{4, -2}, {4, -3}, {5, -3}},
+        {{4, -2}, {5, -2}, {5, -3}},
+        {{6, -3}, {5, -2}, {5, -3}},
+        {{6, -3}, {5, -2}, {6, -2}},
+        {{5, -1}, {5, -2}, {6, -2}}
+    }};
+
+    Plane p = {{
+        {{0, 0}, {4, 0}},
+        {{4, 0}, {4, 1}},
+        {{4, 1}, {3, 2}, false},
+        {{3, 2}, {3, 3}},
+        {{3, 3}, {0, 6}},
+        {{0, 6}, {-1, 6}},
+        {{-1, 6}, {-1, 5}, false},
+        {{-1, 5}, {-4, 5}},
+        {{-4, 5}, {-4, 3}},
+        {{-4, 3}, {-2, 1}},
+        {{-2, 1}, {-1, 1}, false},
+        {{-1, 1}, {0, 0}},
+    }};
+
+    p.remove_ending_point({-1, 1});
+    p.remove_starting_point({-1, 1});
+
+    p.remove_starting_point({3, 2});
+
+    p.remove_ending_point({-1, 5});
+    p.remove_starting_point({-1, 5});
+    // plane created
+
+    cout << "soulutions found: " << p.find_solution({
+            A,
+            B,
+            C,
+            D
+    }) << '\n';
+
+    cout << "------------\n";
+}
 int main() {
     //plane_test();
 
     // triangle_test();
 
-    small_blocks();
+    // small_blocks();
 
     // create_and_delete();
+
+    first_serious_puzzle();
+
+    // original_puzzle_easy();
 
     return 0;
 }

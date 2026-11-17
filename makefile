@@ -9,3 +9,6 @@ find_solution: find_solution.cpp
 
 clean:
 	rm -f *.o find_solution test solve_*
+
+cleanSolves:
+	rm -f solve_*
